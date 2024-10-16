@@ -30,33 +30,33 @@ synthetic_data:
     bucket_attributes:
       A_bucket:
       - 1000
-      - 2000
+      - 1200
       rA_spigot:
-      - 0.15
-      - 0.16
+      - 0.1
+      - 0.3
       ET_parameter:
       - 2.2447
       - 9.9807e-5
       - 0.0016
       H_bucket:
-      - 0.19
-      - 0.21
+      - 0.1
+      - 0.3
       rH_spigot:
-      - 0.15
-      - 0.16
+      - 0.05
+      - 0.25
       K_infiltration:
       - -13.8857
       - 1.1835
       soil_depth:
       - 0.9
       - 1.1
-    n_buckets: 2
+    n_buckets: 100
     noise:
       et: 0.05
       head: 0.05
       pet: 0.05
       q: 0.05
-    num_records: 1032
+    num_records: 1256
     threshold_precip: 0.01
     max_precip: 0.25
     rain_params:
@@ -81,35 +81,35 @@ synthetic_data:
     bucket_attributes:
       A_bucket:
       - 1000
-      - 2000
+      - 1100
       rA_spigot:
-      - 0.15
-      - 0.16
+      - 0.1
+      - 0.2
       ET_parameter:
       - 2.2447
       - 9.9807e-5
       - 0.0016
       H_bucket:
-      - 0.19
-      - 0.21
+      - 0.1
+      - 0.2
       rH_spigot:
+      - 0.05
       - 0.15
-      - 0.16
       K_infiltration:
       - -13.8857
       - 1.1835
       soil_depth:
       - 0.9
       - 1.1
-    n_buckets: 10
+    n_buckets: 100
     noise:
       et: 0.05
       head: 0.05
       pet: 0.05
       q: 0.05
-    num_records: 1032
+    num_records: 1256
     threshold_precip: 0.01
-    max_precip: 0.25
+    max_precip: 0.1
     rain_params:
       Heavy:
       - 0.2341
@@ -120,14 +120,14 @@ synthetic_data:
       - 0.0009759
     rain_probability:
       Heavy:
-      - 0.45
-      - 0.46
+      - 0.05
+      - 0.1
       Light:
-      - 0.55
-      - 0.56
+      - 0.6
+      - 0.9
       None:
-      - 0.45
-      - 0.46
+      - 0.5
+      - 0.8
   val:
     bucket_attributes:
       A_bucket:
@@ -152,7 +152,7 @@ synthetic_data:
       soil_depth:
       - 0.9
       - 1.1
-    n_buckets: 10
+    n_buckets: 0
     noise:
       et: 0.05
       head: 0.05

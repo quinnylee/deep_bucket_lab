@@ -6,6 +6,9 @@ from data_generation import BucketSimulation
 from model_controller import ModelController
 from validation import ModelValidator
 from scipy.spatial import ConvexHull
+import numpy as np
+from scipy.optimize import linprog
+from qpsolvers import solve_qp
 
 # Load configuration
 def load_config(config_path):
@@ -45,33 +48,18 @@ def in_hull(points, y):
     return lp.success
 
 features_of_interest = ['precip', 'H_bucket', 'rA_spigot', 'rH_spigot'] # can be changed
-train_points = bucket_dictionary['train']
-test_points = bucket_dictionary['test']
+train_points = bucket_dictionary['train'][features_of_interest]
+train_points = train_points.to_numpy()
+test_points = bucket_dictionary['test'][features_of_interest]
+test_points = test_points.to_numpy()
+
+print(train_points)
 
 results = []
-#dists = []
-hull = ConvexHull(train_points)
-vertices = train_points[hull.vertices]
+dists = []
 
 for i in range(len(test_points)):
     results.append(in_hull(train_points, test_points[i]))
-    
-    if results[-1]:
-        dists.append(0)
-    else:
-        X = vertices # points in training set
-        P = np.dot(X, X.T)  # quick way to build a symmetric matrix
-        ext_pt = np.array(test_points[i])
-        q = np.dot(X, ext_pt.T).T * (-1) # multiply ext pt with train polytope
-        A = np.ones((1,len(X)))
-        b = np.array([1.])
-        lb = np.zeros((1,len(X)))
-        x = solve_qp(P, q, A=A, b=b, lb=lb, solver="osqp")
-
-        nearest_pt = np.dot(x, X)
-        #dist = np.linalg.norm((ext_pt - nearest_pt)) 
-
-        #dists.append(dist) 
             
 print(results)
 numInterp = 0
@@ -85,10 +73,10 @@ for result in results:
 
 print("Number of interpolations: ", numInterp)
 print("Number of extrapolations: ", numExterp)
-print("Number of training buckets: ", n_buckets_split["train"])
-print("Number of testing buckets: ", t_n_buckets_split["test"])
-print("Number of training points per bucket: ", time_splits["train"])
-print("Number of testing points per bucket: ", t_time_splits["test"])
+print("Number of training buckets: ", config['synthetic_data']['train']['n_buckets'])
+print("Number of testing buckets: ", config['synthetic_data']['train']['n_buckets'])
+print("Number of training points per bucket: ", config['synthetic_data']['train']['num_records'])
+print("Number of testing points per bucket: ", config['synthetic_data']['test']['num_records'])
 print('done')
 
 
