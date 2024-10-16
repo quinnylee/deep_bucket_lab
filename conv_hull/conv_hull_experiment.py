@@ -49,7 +49,7 @@ train_points = bucket_dictionary['train']
 test_points = bucket_dictionary['test']
 
 results = []
-dists = []
+#dists = []
 hull = ConvexHull(train_points)
 vertices = train_points[hull.vertices]
 
@@ -69,9 +69,9 @@ for i in range(len(test_points)):
         x = solve_qp(P, q, A=A, b=b, lb=lb, solver="osqp")
 
         nearest_pt = np.dot(x, X)
-        dist = np.linalg.norm((ext_pt - nearest_pt)) 
+        #dist = np.linalg.norm((ext_pt - nearest_pt)) 
 
-        dists.append(dist) 
+        #dists.append(dist) 
             
 print(results)
 numInterp = 0
