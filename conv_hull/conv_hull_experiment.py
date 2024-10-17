@@ -1,7 +1,12 @@
 import sys
-sys.path.append('./src/')
 import yaml
 import torch
+import os
+
+src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../src'))
+sys.path.append(src_path)
+
+
 from data_generation import BucketSimulation
 from model_controller import ModelController
 from validation import ModelValidator
@@ -16,21 +21,21 @@ def load_config(config_path):
         config = yaml.safe_load(file)
     return config
 
-config = load_config('./configuration/configuration.yml')
+config = load_config('../configuration/configuration.yml')
 
 # Check if CUDA is available and set the device
 device = torch.device('cuda' if torch.cuda.is_available() and config['device']['use_cuda'] else 'cpu')
-
+print("beginning", flush=True)
 # Initialize and generate synthetic data for each split
 bucket_sim_train = BucketSimulation(config, 'train')
 bucket_sim_val = BucketSimulation(config, 'val')
 bucket_sim_test = BucketSimulation(config, 'test')
-
+print("initialization done", flush=True)
 # Simulate and store data for training, validation, and testing
 train_data = bucket_sim_train.generate_data(config['synthetic_data']['train']['num_records'])
 val_data = bucket_sim_val.generate_data(config['synthetic_data']['val']['num_records'])
 test_data = bucket_sim_test.generate_data(config['synthetic_data']['test']['num_records'])
-
+print("simulation done", flush=True)
 bucket_dictionary = {
     'train': train_data,
     'val': val_data,
@@ -52,8 +57,6 @@ train_points = bucket_dictionary['train'][features_of_interest]
 train_points = train_points.to_numpy()
 test_points = bucket_dictionary['test'][features_of_interest]
 test_points = test_points.to_numpy()
-
-print(train_points)
 
 results = []
 dists = []
