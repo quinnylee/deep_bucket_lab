@@ -4,6 +4,7 @@ import yaml
 import scipy.stats as stats
 from pyflo import system
 from pyflo.nrcs import hydrology
+import multiprocessing as mp
 
 class BucketSimulation:
     def __init__(self, config, split):
@@ -98,6 +99,90 @@ class BucketSimulation:
                         rain = stats.gumbel_r.rvs(params["Light"][0], params["Light"][1])
         return rain
 
+    def generate_data_for_bucket(self, ibuc, num_records):
+        column_dtypes = {'precip': 'float64', 'et': 'float64', 'h_bucket': 'float64', 
+                        'q_overflow': 'float64', 'q_spigot': 'float64'}
+        data = pd.DataFrame(index=np.arange(num_records),
+            columns=column_dtypes.keys()).astype(column_dtypes)
+        data['bucket_id'] = ibuc
+        data['time'] = np.arange(num_records)
+
+        for t in range(num_records):
+            precip_in, et = self.simulate_rain_and_et(ibuc, t)
+            self.process_respose_dynamics(ibuc, precip_in, et, t)
+            spigot_out = self.calculate_spigot_out(ibuc, t)
+
+            # Assign calculated values to the DataFrame
+            data.loc[t, ['precip', 'et', 'h_bucket', 'q_overflow', 'q_spigot']] = [
+                precip_in, et, self.h_water_level[ibuc], self.mass_overflow[ibuc], spigot_out
+            ]
+
+            # Additional attributes can be filled in similarly if needed
+            for attribute in self.bucket_attributes_range.keys():
+                data.loc[t, attribute] = self.buckets[attribute][ibuc]
+
+    # Set up basin for unit hydrograph transformation
+        basin = hydrology.Basin(
+            area = self.buckets["A_bucket"][ibuc] / 4047, # transform sq meters to acres -- "the delineated region concentrating to a point"
+            cn=83.0, # "an empirical parameter for predicting direct runoff" 
+            tc=2.3, # "estimated time of concentration in minutes" 
+            runoff_dist=self.uh484, # "unscaled unit hydrograph runoff distribution"
+            peak_factor=1 # "value for scaling peak runoff"
+        )
+
+        # Set up input array for unit hydrograph transformation
+        q_total_inputs = np.zeros(shape=(len(data), 2))
+        q_total_untrans_sum = 0
+
+        for i in range(len(data)):
+            # q_total = q_overflow + q_spigot, transform m to in.
+            q_total_untrans_sum += (data.loc[i,'q_overflow'] + data.loc[i,'q_spigot']) * 39.3701 
+            q_total_inputs[i] = (i, q_total_untrans_sum)
+
+        # Transform q_total using unit hydrograph method
+        q_total_hyd = basin.flood_hydrograph(q_total_inputs, interval=1)
+        q_total = q_total_hyd[:,1]
+        q_total_trans_sum = 0
+
+        for i in range(len(data)):
+            data.loc[i,'q_total'] = q_total[i] / 35.315 / self.buckets["A_bucket"][ibuc] * 3600 # transform cfs to m^3/hr, normalize q by basin area
+            q_total_trans_sum += data.loc[i,'q_total']
+
+        assert num_records > self.warmup_period, "Number of records must be greater than the warmup period"
+        #print("done with bucket ", ibuc, flush=True)
+        #print(data.iloc[self.warmup_period:, :], flush=True)
+        return data.iloc[self.warmup_period:, :]
+    
+    def generate_data(self, num_records):
+        with mp.Pool(processes=mp.cpu_count()) as pool:
+            # Process each bucket in parallel
+            results = pool.starmap(self.generate_data_for_bucket, [(ibuc, num_records) for ibuc in range(self.n_buckets)])
+        
+        # Debugging: Print the raw results from the buckets
+        #print(f"Raw results from buckets: {results}")
+        
+        # Ensure no None values or empty DataFrames in the results
+        valid_results = [res for res in results if res is not None and not res.empty]
+        
+        if not valid_results:
+            raise ValueError("No valid data was generated during the simulation.")
+        
+        # Concatenate the valid results into a single DataFrame
+        data = pd.concat(valid_results, ignore_index=True)
+        return data
+
+
+    '''def generate_data(self, num_records):
+
+        with mp.Pool(processes=mp.cpu_count()) as pool:
+            results = pool.starmap(self.generate_data_for_bucket, [(ibuc, num_records) for ibuc in range(self.n_buckets)])
+        
+        if not results:
+            raise ValueError("No data was generated during the simulation.")
+        
+        data = pd.concat(results, ignore_index=True)
+        return data
+    
     def generate_data(self, num_records):
         column_dtypes = {'precip': 'float64', 'et': 'float64', 'h_bucket': 'float64', 
                         'q_overflow': 'float64', 'q_spigot': 'float64'}
@@ -153,7 +238,7 @@ class BucketSimulation:
                 q_total_trans_sum += data.loc[i,'q_total']
    
         assert num_records > self.warmup_period, "Number of records must be greater than the warmup period"
-        return data.iloc[self.warmup_period:, :]
+        return data.iloc[self.warmup_period:, :]'''
 
 
     def simulate_rain_and_et(self, ibuc, t):

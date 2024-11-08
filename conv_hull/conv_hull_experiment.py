@@ -1,7 +1,9 @@
+# Import packages
 import sys
 import yaml
 import torch
 import os
+import multiprocessing as mp
 
 src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../src'))
 sys.path.append(src_path)
@@ -26,60 +28,73 @@ config = load_config('../configuration/configuration.yml')
 # Check if CUDA is available and set the device
 device = torch.device('cuda' if torch.cuda.is_available() and config['device']['use_cuda'] else 'cpu')
 print("beginning", flush=True)
-# Initialize and generate synthetic data for each split
-bucket_sim_train = BucketSimulation(config, 'train')
-bucket_sim_val = BucketSimulation(config, 'val')
-bucket_sim_test = BucketSimulation(config, 'test')
-print("initialization done", flush=True)
-# Simulate and store data for training, validation, and testing
-train_data = bucket_sim_train.generate_data(config['synthetic_data']['train']['num_records'])
-val_data = bucket_sim_val.generate_data(config['synthetic_data']['val']['num_records'])
-test_data = bucket_sim_test.generate_data(config['synthetic_data']['test']['num_records'])
-print("simulation done", flush=True)
-bucket_dictionary = {
-    'train': train_data,
-    'val': val_data,
-    'test': test_data
-}
+
+# Set number of trials in one run
+num_trials = 3
+completed = 0
+
+while completed < num_trials:
+    # Initialize and generate synthetic data for each split
+    bucket_sim_train = BucketSimulation(config, 'train')
+    bucket_sim_val = BucketSimulation(config, 'val')
+    bucket_sim_test = BucketSimulation(config, 'test')
+    print("initialization done", flush=True)
+
+    # Simulate and store data for training, validation, and testing
+    train_data = bucket_sim_train.generate_data(config['synthetic_data']['train']['num_records'])
+    val_data = bucket_sim_val.generate_data(config['synthetic_data']['val']['num_records'])
+    test_data = bucket_sim_test.generate_data(config['synthetic_data']['test']['num_records'])
+    print("simulation done", flush=True)
+
+    # Stores information
+    bucket_dictionary = {
+        'train': train_data,
+        'val': val_data,
+        'test': test_data
+    }
+
+    # Function for linear programming calculation
+    # Determines if a point y falls within a convex hull defined by points
+    def in_hull(points, y):
+        n_points = len(points)
+        n_dim = len(y)
+        c = np.zeros(n_points)
+        A = np.r_[points.T, np.ones((1, n_points))]
+        b = np.r_[y.T, np.ones(1)]
+        lp = linprog(c, A_eq=A, b_eq=b)
+        return lp.success
+
+    # Generating arrays of training and testing points
+    features_of_interest = ['precip', 'H_bucket', 'rA_spigot', 'rH_spigot'] # can be changed
+    train_points = bucket_dictionary['train'][features_of_interest]
+    train_points = train_points.to_numpy()
+    test_points = bucket_dictionary['test'][features_of_interest]
+    test_points = test_points.to_numpy()
+
+    # Generates vertices of training convex hull to speed up in_hull calculation
+    hull = ConvexHull(train_points)
+    vertices = train_points[hull.vertices]
+    print("conv hull done", flush=True)
 
 
-def in_hull(points, y):
-    n_points = len(points)
-    n_dim = len(y)
-    c = np.zeros(n_points)
-    A = np.r_[points.T, np.ones((1, n_points))]
-    b = np.r_[y.T, np.ones(1)]
-    lp = linprog(c, A_eq=A, b_eq=b)
-    return lp.success
+    # Parallel processing to evaluate interp. or extrap. of test points
+    def process_test_point(test_point):
+        return in_hull(vertices, test_point)
 
-features_of_interest = ['precip', 'H_bucket', 'rA_spigot', 'rH_spigot'] # can be changed
-train_points = bucket_dictionary['train'][features_of_interest]
-train_points = train_points.to_numpy()
-test_points = bucket_dictionary['test'][features_of_interest]
-test_points = test_points.to_numpy()
+    with mp.Pool(processes=mp.cpu_count()) as pool:
+        results = pool.map(process_test_point, test_points)
 
-results = []
-dists = []
+    numInterp = sum(results)
+    numExterp = len(results) - numInterp
 
-for i in range(len(test_points)):
-    results.append(in_hull(train_points, test_points[i]))
-            
-print(results)
-numInterp = 0
-numExterp = 0
+    # Print results
+    print("Number of interpolations: ", numInterp)
+    print("Number of extrapolations: ", numExterp)
+    print("Number of training buckets: ", config['synthetic_data']['train']['n_buckets'])
+    print("Number of testing buckets: ", config['synthetic_data']['train']['n_buckets'])
+    print("Number of training points per bucket: ", config['synthetic_data']['train']['num_records'])
+    print("Number of testing points per bucket: ", config['synthetic_data']['test']['num_records'])
+    print('done')
 
-for result in results:
-    if result:
-        numInterp += 1
-    else:
-        numExterp += 1
-
-print("Number of interpolations: ", numInterp)
-print("Number of extrapolations: ", numExterp)
-print("Number of training buckets: ", config['synthetic_data']['train']['n_buckets'])
-print("Number of testing buckets: ", config['synthetic_data']['train']['n_buckets'])
-print("Number of training points per bucket: ", config['synthetic_data']['train']['num_records'])
-print("Number of testing points per bucket: ", config['synthetic_data']['test']['num_records'])
-print('done')
-
+    completed += 1
 

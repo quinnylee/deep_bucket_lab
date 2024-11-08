@@ -49,11 +49,11 @@ class ModelValidator:
             predictions_dict[var] = self.scaler_out[var].inverse_transform(output_np[:, i:i+1]).flatten()
         return predictions_dict
 
-    def validate_model(self, do_summary_stats=True, do_individual_bucket_metrics=False, do_plot_timeseries=False):
+    def validate_model(self, do_summary_stats=True, do_individual_bucket_metrics=False, do_plot_timeseries=False, get_losses=False):
         output_vars = self.config['output_vars']
         performance_metrics = {var: [] for var in output_vars}
         mass_residuals = []
-
+        losses = []
         for ibuc in self.bucket_dictionary[self.split]['bucket_id'].unique():
             df_obs = self.bucket_dictionary[self.split][self.bucket_dictionary[self.split]['bucket_id'] == ibuc]
             
@@ -92,6 +92,10 @@ class ModelValidator:
             if do_plot_timeseries:
                 plot_timeseries(predictions, observed, output_vars)
 
+            # Saves losses into an array so it can be returned
+            error = (np.subtract(np.array(predictions['q_total']), observed['q_total']))
+            losses = np.concatenate((losses, error), axis=0)
+
         if do_summary_stats:
             print("Performance Metrics Summary Across Buckets:")
             for var in output_vars:
@@ -101,3 +105,6 @@ class ModelValidator:
                     f"90th Pctl: {np.percentile(performance_metrics[var], 90):.3f}")
             print("Mass Residual - Mean: {:.3f}, Median: {:.3f}, 10th Pctl: {:.3f}, 90th Pctl: {:.3f}".format(
                np.mean(mass_residuals), np.median(mass_residuals), np.percentile(mass_residuals, 10), np.percentile(mass_residuals, 90)))
+            
+        if get_losses:
+            return losses
