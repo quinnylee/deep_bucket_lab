@@ -16,7 +16,7 @@ from scipy.spatial import ConvexHull
 import numpy as np
 from scipy.optimize import linprog
 import pandas as pd
-from scipy.stats import mannwhitneyu
+from scipy.stats import ks_2samp
 
 # Load configuration
 def load_config(config_path):
@@ -120,7 +120,7 @@ model_validator = ModelValidator(trained_model, device,
                                  config, "val", model_controller.scaler_out)
 print("validating model", flush=True)
 losses = model_validator.validate_model(get_losses=True)
-print(losses)
+#print(losses)
 
 print("results length, ", len(results))
 print("losses length ", len(losses))
@@ -134,16 +134,29 @@ categories = pd.DataFrame(
 interpolated = categories[categories['result'] == True]
 extrapolated = categories[categories['result'] == False]
 
-print(interpolated['loss'])
-print('\n')
-print(extrapolated['loss'])
-'''
-mean_interp = interpolated['loss'].mean()
-std_interp = interpolated['loss'].std()
-mean_extrap = extrapolated['loss'].mean()
-std_extrap = extrapolated['loss'].std() 
+# get set of common points to test cdfs at
+# uses unique points to capture differences in int/ext
+common_points = np.unique(losses)
 
-# Mann-Whitney U stats test for data without normal dists
-stat, p_value = mannwhitneyu(interpolated['loss'], extrapolated['loss'], alternative='less')
-print("MW U-statistic: ", stat)
-print("p-value: ", p_value)'''
+# compute empirical cdf for exceedance probs for int values
+# compute estimated (interpolated) cdf for common points
+sorted_interpolated = np.sort(interpolated['loss'])
+cdf_interpolated_values_exc = np.arange(1, len(sorted_interpolated)+1) / len(sorted_interpolated)
+cdf_interpolated = np.interp(common_points, sorted_interpolated, cdf_interpolated_values_exc)
+
+# compute empirical cdf for exceedance probs for ext values
+# compute interpolated cdf for common points
+sorted_extrapolated = np.sort(extrapolated['loss'])
+cdf_extrapolated_values = np.arange(1, len(sorted_extrapolated) + 1) / len(sorted_extrapolated)
+cdf_extrapolated = np.interp(common_points, sorted_extrapolated, cdf_extrapolated_values)
+
+print("common_points shape:", common_points.shape)
+print("sorted_interpolated shape:", sorted_interpolated.shape)
+print("cdf_interpolated_values_exc shape:", cdf_interpolated_values_exc.shape)
+
+
+# perform the K-S test at common points
+ks_statistic, p_value = ks_2samp(cdf_interpolated, cdf_extrapolated)
+
+print("K-S Statistic:", ks_statistic)
+print("p-value:", p_value)
